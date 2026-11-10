@@ -16,6 +16,10 @@ class WebviewLoginScreen extends ConsumerStatefulWidget {
 
 class _WebviewLoginScreenState extends ConsumerState<WebviewLoginScreen> {
   bool webviewInitialized = false;
+  bool showTokenLogin = false;
+  bool isSubmittingToken = false;
+  String? tokenError;
+  final tokenController = TextEditingController();
   final webviewController = WebViewController()
     ..setJavaScriptMode(JavaScriptMode.unrestricted);
 
@@ -24,7 +28,33 @@ class _WebviewLoginScreenState extends ConsumerState<WebviewLoginScreen> {
     debugPrint("DISPOSING WEBVIEW");
 
     // widget.fireviewController.dispose();
+    tokenController.dispose();
     super.dispose();
+  }
+
+  Future<void> _submitToken() async {
+    final token = tokenController.text.trim();
+    if (token.isEmpty) {
+      setState(() => tokenError = "Paste a token first.");
+      return;
+    }
+
+    setState(() {
+      isSubmittingToken = true;
+      tokenError = null;
+    });
+
+    try {
+      await ref.read(authProvider.notifier).loginWithToken(token);
+    } catch (e) {
+      setState(() {
+        tokenError = "Couldn't log in with that token.";
+      });
+    } finally {
+      if (mounted) {
+        setState(() => isSubmittingToken = false);
+      }
+    }
   }
 
   @override
@@ -65,6 +95,59 @@ class _WebviewLoginScreenState extends ConsumerState<WebviewLoginScreen> {
     super.initState();
   }
 
+  Widget _buildTokenForm(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: tokenController,
+          obscureText: true,
+          autocorrect: false,
+          enableSuggestions: false,
+          style: GoogleFonts.publicSans(color: Colors.white),
+          decoration: InputDecoration(
+            hintText: "Paste your Discord token",
+            hintStyle: GoogleFonts.publicSans(
+              color: const Color(0xFF808080),
+            ),
+            filled: true,
+            fillColor: const Color(0xFF14161A),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          ),
+          onSubmitted: (_) => isSubmittingToken ? null : _submitToken(),
+        ),
+        if (tokenError != null) ...[
+          const SizedBox(height: 12),
+          Text(
+            tokenError!,
+            style: GoogleFonts.publicSans(
+              color: const Color(0xFFF04747),
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+        const SizedBox(height: 16),
+        ElevatedButton(
+          onPressed: isSubmittingToken ? null : _submitToken,
+          child: isSubmittingToken
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text("Log in"),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     double bottomPadding = MediaQuery.paddingOf(context).bottom;
@@ -91,14 +174,32 @@ class _WebviewLoginScreenState extends ConsumerState<WebviewLoginScreen> {
               child: SizedBox(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(24),
-                    child: webviewInitialized
-                        ? WebViewWidget(
-                            controller: webviewController,
-                          )
-                        : const SizedBox(),
-                  ),
+                  child: showTokenLogin
+                      ? _buildTokenForm(context)
+                      : ClipRRect(
+                          borderRadius: BorderRadius.circular(24),
+                          child: webviewInitialized
+                              ? WebViewWidget(
+                                  controller: webviewController,
+                                )
+                              : const SizedBox(),
+                        ),
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  showTokenLogin = !showTokenLogin;
+                  tokenError = null;
+                });
+              },
+              child: Text(
+                showTokenLogin ? "Log in with browser instead" : "Log in with token",
+                style: GoogleFonts.publicSans(
+                  color: const Color(0xFFC8C8C8),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
